@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Cosmic Countdown - Fixed Sequence</title>
+    <title>Cosmic Unified Countdown</title>
     <style>
         body, html {
             margin: 0;
@@ -21,7 +21,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 1; /* Particle system canvas */
+            z-index: 1;
         }
 
         #video {
@@ -93,11 +93,10 @@
         const video = document.getElementById('video');
         const overlay = document.getElementById('overlay');
 
-        let currentStage = 0; // 0: Idle/Passive, 1-3: Countdown Numbers, 4: Explosion/Boom, 5: Final Static I ❤️ YOU
-        
+        let currentStage = 0; // 0: Ambient Sky, 1-3: Numbers, 4: Explosion Burst, 5: Horizontal I ❤️ YOU
         let particles = [];
         let balloons = [];
-        let stars = [];
+        const maxParticles = 900; // Keep performance high on mobile webkit
 
         function resize() {
             canvas.width = window.innerWidth;
@@ -106,79 +105,77 @@
         window.addEventListener('resize', resize);
         resize();
 
-        // Layer 1: Passive soft circular white background particles
-        class BackgroundStar {
+        // Unified Swarm Particle Class
+        class SwarmParticle {
             constructor() {
                 this.x = Math.random() * canvas.width;
                 this.y = Math.random() * canvas.height;
-                this.size = 1.5 + Math.random() * 2.5;
-                this.alpha = Math.random() * 0.7;
-                this.speed = 0.005 + Math.random() * 0.01;
+                this.vx = (Math.random() - 0.5) * 0.8;
+                this.vy = (Math.random() - 0.5) * 0.8;
+                this.size = 2 + Math.random() * 2;
+                this.baseColor = '#FFFFFF';
+                this.currentColor = '#FFFFFF';
+                this.alpha = 0.4 + Math.random() * 0.5;
+                this.ease = 0.07 + Math.random() * 0.06;
+                this.isExploding = false;
             }
-            update() {
-                this.alpha += this.speed;
-                if (this.alpha > 0.8 || this.alpha < 0.1) this.speed = -this.speed;
-            }
-            draw() {
-                ctx.fillStyle = `rgba(255, 255, 255, ${Math.abs(this.alpha)})`;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
 
-        // Layer 3: Main Dynamic Morphing Particle Engine
-        class Particle {
-            constructor(x, y, color) {
-                this.x = x || Math.random() * canvas.width;
-                this.y = y || Math.random() * canvas.height;
-                this.vx = 0;
-                this.vy = 0;
-                this.size = 2.5 + Math.random() * 2;
-                this.color = color || '#FFFFFF';
-                this.ease = 0.08 + Math.random() * 0.08;
+            updateAmbient() {
+                // Natural drift simulation for midnight sky feel
+                this.x += this.vx;
+                this.y += this.vy;
+
+                if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
+                if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+                this.currentColor = `rgba(255, 255, 255, ${this.alpha})`;
             }
-            updateMorph(targetX, targetY) {
-                let dx = targetX - this.x;
-                let dy = targetY - this.y;
+
+            updateTarget(tx, ty, targetColor) {
+                // Kinetic snapping formula pulling particles into vector paths
+                let dx = tx - this.x;
+                let dy = ty - this.y;
                 this.x += dx * this.ease;
                 this.y += dy * this.ease;
+                this.currentColor = targetColor;
             }
+
             explode() {
                 const angle = Math.random() * Math.PI * 2;
-                const force = 12 + Math.random() * 18;
+                const force = 15 + Math.random() * 20;
                 this.vx = Math.cos(angle) * force;
                 this.vy = Math.sin(angle) * force;
+                this.isExploding = true;
             }
+
             updateExplosion() {
                 this.x += this.vx;
                 this.y += this.vy;
-                this.vx *= 0.92;
-                this.vy *= 0.92;
+                this.vx *= 0.91; // Air friction deceleration mapping
+                this.vy *= 0.91;
             }
+
             draw() {
-                ctx.fillStyle = this.color;
+                ctx.fillStyle = this.currentColor;
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
                 ctx.fill();
             }
         }
 
-        // Layer 2: Shimmering Particle Balloons (Behind the text)
-        class ParticleBalloon {
-            constructor(x, y) {
-                this.x = x;
-                this.y = y;
-                this.radius = 20 + Math.random() * 18;
-                this.speedY = 1.0 + Math.random() * 1.5;
+        // Ambient Background Particle Balloons (Guaranteed underneath text rendering)
+        class BackgroundBalloon {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = canvas.height + 50;
+                this.radius = 22 + Math.random() * 16;
+                this.speedY = 1.2 + Math.random() * 1.6;
                 this.wobble = Math.random() * 100;
-                // Pinkish/Reddish/Soft Magenta theme palette
-                const hues = [340, 355, 15, 330];
-                this.color = `hsla(${hues[Math.floor(Math.random() * hues.length)]}, 85%, 65%, 0.45)`;
+                const hues = [345, 355, 10, 330]; // Romantic warm hues
+                this.color = `hsla(${hues[Math.floor(Math.random() * hues.length)]}, 85%, 60%, 0.45)`;
             }
             update() {
                 this.y -= this.speedY;
-                this.wobble += 0.03;
+                this.wobble += 0.025;
                 this.x += Math.sin(this.wobble) * 0.4;
             }
             draw() {
@@ -187,46 +184,39 @@
                 ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
                 ctx.fill();
                 
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
                 ctx.beginPath();
                 ctx.moveTo(this.x, this.y + this.radius);
-                ctx.quadraticCurveTo(this.x - 3, this.y + this.radius + 10, this.x, this.y + this.radius + 22);
+                ctx.quadraticCurveTo(this.x - 3, this.y + this.radius + 12, this.x, this.y + this.radius + 24);
                 ctx.stroke();
             }
         }
 
-        // Direct Coordinate Map Synthesizer
-        function getTargets(type, value) {
+        // Matrix Coordinate Generator
+        function generateStructuralTargets(type, value) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = 'white';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
 
             if (type === 'countdown') {
-                ctx.font = `bold ${Math.min(canvas.width * 0.45, 260)}px sans-serif`;
+                ctx.font = `bold ${Math.min(canvas.width * 0.5, 280)}px sans-serif`;
                 ctx.fillText(value, canvas.width / 2, canvas.height / 2);
             } else if (type === 'final') {
-                // Render entire I ❤️ YOU phrase on a single horizontal line
-                const fontSize = Math.min(canvas.width * 0.1, 70);
+                const fontSize = Math.min(canvas.width * 0.12, 65);
                 ctx.font = `bold ${fontSize}px sans-serif`;
-                
-                // Measure entire string width to center correctly
-                const text = "I ❤️ YOU";
-                const totalWidth = ctx.measureText(text).width;
-                const startX = (canvas.width - totalWidth) / 2;
-                const centerY = canvas.height / 2;
-
-                // Render components for coordinate mapping, but must handle Heart formula
-                ctx.fillText(text, canvas.width / 2, centerY);
+                ctx.fillText("I  ❤️  YOU", canvas.width / 2, canvas.height / 2);
             }
 
             const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const targets = [];
-            const step = 5; 
+            
+            // Adjust resolution spacing depending on system constraints
+            const step = canvas.width < 500 ? 4 : 5;
 
             for (let y = 0; y < canvas.height; y += step) {
                 for (let x = 0; x < canvas.width; x += step) {
-                    if (imgData.data[(y * canvas.width + x) * 4 + 3] > 128) {
+                    if (imgData.data[(y * canvas.width + x) * 4 + 3] > 110) {
                         targets.push({ x, y });
                     }
                 }
@@ -235,51 +225,26 @@
         }
 
         let currentTargets = [];
-        function morphTo(type, value) {
-            currentTargets = getTargets(type, value);
-            
-            // Re-allocate structural pool bounds without hard flashing
-            while (particles.length < currentTargets.length) {
-                particles.push(new Particle(canvas.width / 2, canvas.height / 2, '#fff'));
-            }
-
-            // Assign base particle colors depending on current stage/phrase
-            particles.forEach((p, idx) => {
-                const t = currentTargets[idx];
-                if (!t) return;
-                
-                if (type === 'countdown') {
-                    p.color = '#ff4d79'; // Rich pinkish-red number color
-                } else if (type === 'final') {
-                    // Determine if coordinate falls within the central heart area to colour it red
-                    const centerY = canvas.height / 2;
-                    const fontSize = Math.min(canvas.width * 0.1, 70);
-                    
-                    // Simple spatial coloring - map particles that fall in the center section of the horizontal line to red
-                    const sectionWidth = canvas.width / 5;
-                    if (t.x > canvas.width / 2 - sectionWidth/2 && t.x < canvas.width / 2 + sectionWidth/2) {
-                        p.color = '#ff1a53'; // Crimson Heart color
-                    } else {
-                        p.color = '#FFFFFF'; // White letters
-                    }
-                }
-            });
+        function remapSwarm(type, value) {
+            currentTargets = generateStructuralTargets(type, value);
+            // Dynamic sorting to minimize cross-screen parsing lines
+            currentTargets.sort((a, b) => a.y - b.y || a.x - b.x);
         }
 
         function triggerBoom() {
             currentStage = 4;
             particles.forEach(p => p.explode());
             
-            // Populate background balloons cleanly BEHIND future text canvas
-            for(let i=0; i<30; i++) {
-                balloons.push(new ParticleBalloon(Math.random() * canvas.width, canvas.height + 60));
+            // Spawn background layer balloons instantly
+            for(let i = 0; i < 25; i++) {
+                balloons.push(new BackgroundBalloon());
             }
 
-            // After explosion, transition particles into the final horizontal phrase
+            // Snaps directly into horizontal line structure cleanly
             setTimeout(() => {
                 currentStage = 5;
-                morphTo('final', ''); // Forms static "I ❤️ YOU" horizontal line
-            }, 1000);
+                remapSwarm('final', '');
+            }, 900);
         }
 
         function handleGesture(fingerCount) {
@@ -287,51 +252,60 @@
 
             if (fingerCount === 1 && currentStage !== 1) {
                 currentStage = 1;
-                morphTo('countdown', '1');
+                remapSwarm('countdown', '1');
             } else if (fingerCount === 2 && currentStage !== 2) {
                 currentStage = 2;
-                morphTo('countdown', '2');
+                remapSwarm('countdown', '2');
             } else if (fingerCount === 3 && currentStage !== 3) {
                 currentStage = 3;
-                morphTo('countdown', '3');
+                remapSwarm('countdown', '3');
             } else if (fingerCount === 5 && currentStage === 3) {
-                triggerBoom(); // Straight open palm activates kinetic explosion
+                triggerBoom();
             }
         }
 
-        // Render Loop Execution Plane
+        // Master Animation Loop Plane
         function loop() {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.25)'; // Smooth light decay trail
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.22)'; // Smooth persistence trailing
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Layer 1: Passive White Circular Background Dots
-            stars.forEach(s => { s.update(); s.draw(); });
-
-            // Layer 2: Shimmering Particle Balloons (Behind the text, z-index managed by draw order)
+            // STEP 1: Render Balloons FIRST so they act as background layer behind text
             balloons.forEach(b => { b.update(); b.draw(); });
-            // Clean out scrolled elements safely
             balloons = balloons.filter(b => b.y > -100);
-            if (currentStage === 5 && Math.random() < 0.04) {
-                // Generate a few ambient balloons floating in background
-                balloons.push(new ParticleBalloon(Math.random() * canvas.width, canvas.height + 40));
+            if (currentStage === 5 && Math.random() < 0.03) {
+                balloons.push(new BackgroundBalloon());
             }
 
-            // Layer 3: Main Morphing Particle System (In the foreground)
-            if (currentStage >= 1 && currentStage <= 3) {
-                particles.forEach((p, idx) => {
-                    let target = currentTargets[idx] || currentTargets[currentTargets.length - 1];
-                    if (target) p.updateMorph(target.x, target.y);
-                    p.draw();
-                });
-            } else if (currentStage === 4) {
-                particles.forEach(p => { p.updateExplosion(); p.draw(); });
-            } else if (currentStage === 5) {
-                particles.forEach((p, idx) => {
-                    let target = currentTargets[idx] || currentTargets[currentTargets.length - 1];
-                    if (target) p.updateMorph(target.x, target.y);
-                    p.draw();
-                });
-            }
+            // STEP 2: Render Core Interactive Swarm Particle Plane
+            particles.forEach((p, idx) => {
+                if (currentStage === 0) {
+                    p.updateAmbient();
+                } else if (currentStage >= 1 && currentStage <= 3) {
+                    let target = currentTargets[idx];
+                    if (target) {
+                        p.updateTarget(target.x, target.y, '#ff4d79'); // Snaps to pink-red shape
+                    } else {
+                        p.updateAmbient(); // Leftover background dots continue hovering
+                    }
+                } else if (currentStage === 4) {
+                    p.updateExplosion();
+                } else if (currentStage === 5) {
+                    let target = currentTargets[idx];
+                    if (target) {
+                        // Split line into localized segment colors (Center Heart section turns crimson)
+                        const middleCut = canvas.width * 0.16;
+                        if (target.x > (canvas.width / 2 - middleCut) && target.x < (canvas.width / 2 + middleCut)) {
+                            p.updateTarget(target.x, target.y, '#ff1a53'); // Crimson Heart
+                        } else {
+                            p.updateTarget(target.x, target.y, '#FFFFFF'); // Stellar White text
+                        }
+                    } else {
+                        // Ambient drift fallback for unmapped particles
+                        p.updateAmbient();
+                    }
+                }
+                p.draw();
+            });
 
             requestAnimationFrame(loop);
         }
@@ -340,8 +314,8 @@
             overlay.style.opacity = 0;
             setTimeout(() => overlay.style.display = 'none', 500);
 
-            // Generate initial passive starfield
-            stars = Array.from({ length: 70 }, () => new BackgroundStar());
+            // Populate the primary unified system matrix pool
+            particles = Array.from({ length: maxParticles }, () => new SwarmParticle());
 
             const hands = new Hands({
                 locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
@@ -350,8 +324,8 @@
             hands.setOptions({
                 maxNumHands: 1,
                 modelComplexity: 1,
-                minDetectionConfidence: 0.65,
-                minTrackingConfidence: 0.65
+                minDetectionConfidence: 0.7,
+                minTrackingConfidence: 0.7
             });
 
             hands.onResults((results) => {
@@ -359,13 +333,12 @@
                     const landmarks = results.multiHandLandmarks[0];
                     
                     let fingersUp = 0;
-                    const tipIds = [8, 12, 16, 20]; // Index, Middle, Ring, Pinky
+                    const tipIds = [8, 12, 16, 20];
                     
                     tipIds.forEach(tip => {
                         if (landmarks[tip].y < landmarks[tip - 2].y) fingersUp++;
                     });
                     
-                    // Simple Thumb detection matrix (works well enough for vertical hand posture)
                     if (landmarks[4].x < landmarks[3].x) fingersUp++;
 
                     handleGesture(fingersUp);
