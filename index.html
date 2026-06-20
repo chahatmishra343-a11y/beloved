@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Cosmic Countdown</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        #video {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 100px;
+            height: 130px;
+            border-radius: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            transform: scaleX(-1); /* Mirror view */
+            object-fit: cover;
+            z-index: 10;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            z-index: 100;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+            transition: opacity 0.5s ease;
+        }
+
+        .glass-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 15px 35px;
+            color: white;
+            border-radius: 30px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            margin-top: 20px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+    <div id="overlay">
+        <h2>✨ Cosmic Gesture Countdown ✨</h2>
+        <p>Place your phone steadily, step back, and use your fingers to count down (1 → 2 → 3 → BOOM!).</p>
+        <button class="glass-btn" onclick="startExperience()">Start Camera</button>
+    </div>
+
+    <canvas id="canvas"></canvas>
+    <video id="video" playsinline></video>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const video = document.getElementById('video');
+        const overlay = document.getElementById('overlay');
+
+        let currentStage = 0; // 0: tracking, 1: One, 2: Two, 3: Three, 4: BOOM Balloon explosion
+        let particles = [];
+        let balloons = [];
+
+        // Set canvas sizing
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Standard Starfield Particles (Background)
+        class BackgroundStar {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 1.5;
+                this.alpha = Math.random();
+                this.speed = 0.01 + Math.random() * 0.02;
+            }
+            update() {
+                this.alpha += this.speed;
+                if (this.alpha > 1 || this.alpha < 0) this.speed = -this.speed;
+            }
+            draw() {
+                ctx.fillStyle = `rgba(255, 255, 255, ${Math.abs(this.alpha)})`;
+                ctx.fillRect(this.x, this.y, this.size, this.size);
+            }
+        }
+
+        const stars = Array.from({ length: 100 }, () => new BackgroundStar());
+
+        // Particle Class for Numbers and Explosions
+        class Particle {
+            constructor(x, y, color) {
+                this.originX = x;
+                this.originY = y;
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.vx = 0;
+                this.vy = 0;
+                this.size = 2 + Math.random() * 2;
+                this.color = color || 'rgba(255, 255, 255, 0.8)';
+                this.ease = 0.1 + Math.random() * 0.15;
+            }
+            update(targetX, targetY) {
+                // Morph towards assigned text target paths
+                let dx = targetX - this.x;
+                let dy = targetY - this.y;
+                this.x += dx * this.ease;
+                this.y += dy * this.ease;
+            }
+            explode() {
+                this.vx = (Math.random() - 0.5) * 25;
+                this.vy = (Math.random() - 0.5) * 25;
+            }
+            updateExplosion() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vx *= 0.95;
+                this.vy *= 0.95;
+            }
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Particle Balloon Class
+        class ParticleBalloon {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = 25 + Math.random() * 20;
+                this.speedY = 1.5 + Math.random() * 2;
+                this.wobble = Math.random() * 100;
+                this.color = `hsla(${Math.random() * 360}, 85%, 65%, 0.8)`;
+            }
+            update() {
+                this.y -= this.speedY;
+                this.wobble += 0.05;
+                this.x += Math.sin(this.wobble) * 0.5;
+            }
+            draw() {
+                // Shiny Particle Cluster forming a Balloon shape
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw a small string
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y + this.radius);
+                ctx.quadraticCurveTo(this.x - 5, this.y + this.radius + 15, this.x, this.y + this.radius + 30);
+                ctx.stroke();
+            }
+        }
+
+        // Generate target text coordinate matrices dynamically
+        function getTextTargets(text) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = `bold ${Math.min(canvas.width * 0.5, 300)}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const targets = [];
+            const step = 6; // Balance performance vs point density
+
+            for (let y = 0; y < canvas.height; y += step) {
+                for (let x = 0; x < canvas.width; x += step) {
+                    let alpha = imgData.data[(y * canvas.width + x) * 4 + 3];
+                    if (alpha > 128) {
+                        targets.push({ x, y });
+                    }
+                }
+            }
+            return targets;
+        }
+
+        let currentTargets = [];
+        function morphTo(text, color) {
+            currentTargets = getTextTargets(text);
+            // Adjust pool sizes dynamically
+            while (particles.length < currentTargets.length) {
+                particles.push(new Particle(canvas.width / 2, canvas.height / 2, color));
+            }
+        }
+
+        function triggerBoom() {
+            currentStage = 4;
+            // Pop out standard text particles violently
+            particles.forEach(p => p.explode());
+            
+            // Generate shimmering particle balloons from bottom edge
+            for(let i=0; i<25; i++) {
+                balloons.push(new ParticleBalloon(Math.random() * canvas.width, canvas.height + 50));
+            }
+        }
+
+        // Tracking Logic mapping detected finger counts to our rendering triggers
+        function handleGesture(fingerCount) {
+            if (currentStage === 4) return; // Prevent resetting after explosion
+
+            if (fingerCount === 1 && currentStage !== 1) {
+                currentStage = 1;
+                morphTo("1", "rgba(0, 229, 255, 0.85)");
+            } else if (fingerCount === 2 && currentStage !== 2) {
+                currentStage = 2;
+                morphTo("2", "rgba(238, 130, 238, 0.85)");
+            } else if (fingerCount === 3 && currentStage !== 3) {
+                currentStage = 3;
+                morphTo("3", "rgba(255, 215, 0, 0.85)");
+            } else if ((fingerCount === 0 || fingerCount > 3) && currentStage === 3) {
+                triggerBoom();
+            }
+        }
+
+        // Main Simulation Loop
+        function loop() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)'; // Smooth trail persistence
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            stars.forEach(s => { s.update(); s.draw(); });
+
+            if (currentStage >= 1 && currentStage <= 3) {
+                particles.forEach((p, idx) => {
+                    let target = currentTargets[idx] || currentTargets[currentTargets.length - 1];
+                    if (target) p.update(target.x, target.y);
+                    p.draw();
+                });
+            } else if (currentStage === 4) {
+                particles.forEach(p => { p.updateExplosion(); p.draw(); });
+                balloons.forEach(b => { b.update(); b.draw(); });
+                
+                // Draw the final premium text over everything
+                ctx.fillStyle = '#FFF';
+                ctx.font = 'bold 2.5rem sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText("YOU ARE SPECIAL!", canvas.width / 2, canvas.height / 2);
+            }
+
+            requestAnimationFrame(loop);
+        }
+
+        // Camera Framework Activation
+        function startExperience() {
+            overlay.style.opacity = 0;
+            setTimeout(() => overlay.style.display = 'none', 500);
+
+            const hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+
+            hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.6,
+                minTrackingConfidence: 0.6
+            });
+
+            hands.onResults((results) => {
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    const landmarks = results.multiHandLandmarks[0];
+                    
+                    // Basic Tip-to-Base height checking logic to determine open finger status
+                    let fingersUp = 0;
+                    const tipIds = [8, 12, 16, 20]; // Index, Middle, Ring, Pinky tracking IDs
+                    
+                    tipIds.forEach(tip => {
+                        if (landmarks[tip].y < landmarks[tip - 2].y) fingersUp++;
+                    });
+                    
+                    // Simple Thumb detection
+                    if (landmarks[4].x < landmarks[3].x) fingersUp++;
+
+                    handleGesture(fingersUp);
+                }
+            });
+
+            const camera = new Camera(video, {
+                onFrame: async () => {
+                    await hands.send({ image: video });
+                },
+                width: 480,
+                height: 640
+            });
+            camera.start();
+            loop();
+        }
+    </script>
+</body>
+</html>
